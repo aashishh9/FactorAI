@@ -1,38 +1,56 @@
-import os
+import requests
 
-from dotenv import load_dotenv
-from openai import OpenAI
-
-load_dotenv()
-
-client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY")
-)
+OLLAMA_URL = "http://localhost:11434/api/chat"
+MODEL = "qwen3:4b"
 
 
 def analyze_production_issue(context: str) -> str:
+
     prompt = f"""
-You are FactorAI, an AI assistant for manufacturing operations.
+/no_think
 
-Analyze the factory data below.
+You are FactorAI.
 
-Your job is to identify:
+Analyze this factory data.
 
-1. What happened
-2. Evidence from the data
-3. The most likely cause
-4. Recommended action
+Give ONLY these 5 lines:
 
-Do not invent facts that are not present in the data.
+What happened: one short sentence
+Likely cause: one short sentence
+Evidence: one short sentence with numbers
+Recommended action: one short sentence
+Confidence: number between 0 and 100%
+
+Do not explain your reasoning.
+Do not write anything else.
 
 Factory data:
-
 {context}
 """
 
-    response = client.responses.create(
-        model="gpt-5",
-        input=prompt
+    response = requests.post(
+        OLLAMA_URL,
+        json={
+            "model": MODEL,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "stream": False,
+            "think": False,
+            "keep_alive": "10m",
+            "options": {
+                "num_predict": 100,
+                "temperature": 0.1
+            }
+        },
+        timeout=120,
     )
 
-    return response.output_text
+    response.raise_for_status()
+
+    data = response.json()
+
+    return data["message"]["content"]

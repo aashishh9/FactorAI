@@ -19,6 +19,9 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [aiInsight, setAiInsight] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+
   useEffect(() => {
     fetch("http://127.0.0.1:8000/dashboard/summary")
       .then((response) => {
@@ -38,6 +41,29 @@ export default function Home() {
       });
   }, []);
 
+  async function askFactorAI() {
+    setAiLoading(true);
+    setAiInsight("");
+
+    try {
+      const response = await fetch("http://127.0.0.1:8000/ai/analyze/1");
+
+      if (!response.ok) {
+        throw new Error("AI request failed");
+      }
+
+      const result = await response.json();
+
+      setAiInsight(result.analysis);
+    } catch (error) {
+      setAiInsight(
+        "FactorAI could not complete the analysis. Make sure Ollama and the backend are running.",
+      );
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
@@ -51,7 +77,9 @@ export default function Home() {
       <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold">FactorAI</h1>
+
           <p className="mt-2 text-red-400">{error}</p>
+
           <p className="mt-2 text-sm text-slate-500">
             Make sure the FastAPI backend is running on port 8000.
           </p>
@@ -127,16 +155,12 @@ export default function Home() {
         {/* Production */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2 rounded-2xl border border-slate-800 bg-slate-900 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-lg font-semibold">
-                  Production Performance
-                </h2>
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold">Production Performance</h2>
 
-                <p className="text-sm text-slate-500">
-                  Current production versus target
-                </p>
-              </div>
+              <p className="text-sm text-slate-500">
+                Current production versus target
+              </p>
             </div>
 
             <div className="space-y-6">
@@ -170,14 +194,24 @@ export default function Home() {
               </div>
             </div>
 
-            <p className="text-sm text-slate-300 leading-6">
-              Production data is currently available for analysis. FactorAI can
-              identify production deviations, quality problems and potential
-              maintenance issues.
-            </p>
+            <div className="text-sm text-slate-300 leading-6">
+              {aiInsight ? (
+                <pre className="whitespace-pre-wrap font-sans">{aiInsight}</pre>
+              ) : (
+                <p>
+                  Production data is currently available for analysis. FactorAI
+                  can identify production deviations, quality problems and
+                  potential maintenance issues.
+                </p>
+              )}
+            </div>
 
-            <button className="mt-6 w-full rounded-xl bg-blue-500 hover:bg-blue-600 transition px-4 py-3 text-sm font-medium">
-              Ask FactorAI
+            <button
+              onClick={askFactorAI}
+              disabled={aiLoading}
+              className="mt-6 w-full rounded-xl bg-blue-500 hover:bg-blue-600 transition px-4 py-3 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {aiLoading ? "Analyzing..." : "Ask FactorAI"}
             </button>
           </div>
         </section>
@@ -208,7 +242,6 @@ export default function Home() {
     </main>
   );
 }
-
 function MetricCard({
   title,
   value,
@@ -238,7 +271,7 @@ function ProgressBar({
   value: number;
   max: number;
 }) {
-  const percentage = Math.min((value / max) * 100, 100);
+  const percentage = max > 0 ? Math.min((value / max) * 100, 100) : 0;
 
   return (
     <div>
