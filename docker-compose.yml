@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:17
+    container_name: factorai-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: factorai
+      POSTGRES_PASSWORD: factorai_password
+      POSTGRES_DB: factorai
+    ports:
+      - "5434:5432"
+    volumes:
+      - factorai_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  factorai_postgres_data:
