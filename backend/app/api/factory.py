@@ -2,19 +2,21 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.dependencies import get_current_user
 from app.models.factory import Factory
 from app.models.machine import Machine
 
 
 router = APIRouter(
     prefix="/factory",
-    tags=["Factory"]
+    tags=["Factory"],
 )
 
 
 @router.get("/")
 def get_factories(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     factories = db.query(Factory).all()
 
@@ -22,7 +24,7 @@ def get_factories(
         {
             "id": factory.id,
             "name": factory.name,
-            "location": factory.location
+            "location": factory.location,
         }
         for factory in factories
     ]
@@ -31,7 +33,8 @@ def get_factories(
 @router.get("/{factory_id}/machines")
 def get_factory_machines(
     factory_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     machines = (
         db.query(Machine)
@@ -45,7 +48,7 @@ def get_factory_machines(
             "name": machine.name,
             "machine_type": machine.machine_type,
             "status": machine.status,
-            "factory_id": machine.factory_id
+            "factory_id": machine.factory_id,
         }
         for machine in machines
     ]

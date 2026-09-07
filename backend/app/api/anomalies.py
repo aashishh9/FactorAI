@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.dependencies import get_current_user
 from app.models.machine import Machine
 from app.services.anomaly_service import detect_machine_anomaly
 
@@ -16,6 +17,7 @@ router = APIRouter(
 def get_machine_anomaly(
     machine_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     machine = (
         db.query(Machine)
@@ -37,6 +39,7 @@ def get_machine_anomaly(
 @router.get("/")
 def get_all_anomalies(
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     machines = (
         db.query(Machine)
@@ -47,7 +50,6 @@ def get_all_anomalies(
     results = []
 
     for machine in machines:
-
         result = detect_machine_anomaly(
             machine,
             db,

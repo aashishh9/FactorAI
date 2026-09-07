@@ -3,8 +3,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.dependencies import get_current_user
 from app.models.machine import Machine
 from app.models.maintenance import MaintenanceTicket
+
 
 router = APIRouter(
     prefix="/maintenance",
@@ -27,6 +29,7 @@ class MaintenanceTicketStatusUpdate(BaseModel):
 def create_maintenance_ticket(
     request: MaintenanceTicketCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     machine = (
         db.query(Machine)
@@ -70,6 +73,7 @@ def create_maintenance_ticket(
 @router.get("/")
 def get_maintenance_tickets(
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     tickets = (
         db.query(MaintenanceTicket)
@@ -86,18 +90,16 @@ def get_maintenance_tickets(
             .first()
         )
 
-        results.append(
-            {
-                "id": ticket.id,
-                "machine_id": ticket.machine_id,
-                "machine": machine.name if machine else "Unknown",
-                "title": ticket.title,
-                "description": ticket.description,
-                "priority": ticket.priority,
-                "status": ticket.status,
-                "created_at": ticket.created_at,
-            }
-        )
+        results.append({
+            "id": ticket.id,
+            "machine_id": ticket.machine_id,
+            "machine": machine.name if machine else "Unknown",
+            "title": ticket.title,
+            "description": ticket.description,
+            "priority": ticket.priority,
+            "status": ticket.status,
+            "created_at": ticket.created_at,
+        })
 
     return {
         "count": len(results),
@@ -110,6 +112,7 @@ def update_ticket_status(
     ticket_id: int,
     request: MaintenanceTicketStatusUpdate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     allowed_statuses = {
         "open",

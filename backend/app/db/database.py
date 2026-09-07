@@ -1,7 +1,13 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
-DATABASE_URL = "postgresql+psycopg://factorai:factorai_password@localhost:5434/factorai"
+import os
+
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg://factorai:factorai_password@localhost:5434/factorai",
+)
+
 engine = create_engine(DATABASE_URL)
 
 SessionLocal = sessionmaker(

@@ -3,6 +3,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.dependencies import get_current_user
 from app.models.machine import Machine
 from app.models.production import ProductionRecord
 from app.models.quality import QualityRecord
@@ -10,13 +11,14 @@ from app.models.quality import QualityRecord
 
 router = APIRouter(
     prefix="/dashboard",
-    tags=["Dashboard"]
+    tags=["Dashboard"],
 )
 
 
 @router.get("/summary")
 def get_dashboard_summary(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     total_machines = db.query(Machine).count()
 
@@ -33,30 +35,26 @@ def get_dashboard_summary(
     )
 
     total_production = (
-        db.query(
-            func.sum(ProductionRecord.production_count)
-        ).scalar()
+        db.query(func.sum(ProductionRecord.production_count))
+        .scalar()
         or 0
     )
 
     total_target = (
-        db.query(
-            func.sum(ProductionRecord.target_count)
-        ).scalar()
+        db.query(func.sum(ProductionRecord.target_count))
+        .scalar()
         or 0
     )
 
     total_inspected = (
-        db.query(
-            func.sum(QualityRecord.inspected_count)
-        ).scalar()
+        db.query(func.sum(QualityRecord.inspected_count))
+        .scalar()
         or 0
     )
 
     total_defects = (
-        db.query(
-            func.sum(QualityRecord.defect_count)
-        ).scalar()
+        db.query(func.sum(QualityRecord.defect_count))
+        .scalar()
         or 0
     )
 
@@ -79,9 +77,13 @@ def get_dashboard_summary(
         "total_production": total_production,
         "total_target": total_target,
         "production_achievement": round(
-            production_achievement, 2
+            production_achievement,
+            2,
         ),
         "total_inspected": total_inspected,
         "total_defects": total_defects,
-        "defect_rate": round(defect_rate, 2)
+        "defect_rate": round(
+            defect_rate,
+            2,
+        ),
     }
