@@ -14,17 +14,19 @@ type DashboardData = {
   defect_rate: number;
 };
 
+type AnomalyItem = {
+  type: string;
+  severity: string;
+  message: string;
+};
+
 type Anomaly = {
   machine_id: number;
   machine: string;
   status: string;
   anomaly_detected: boolean;
   anomaly_count: number;
-  anomalies: {
-    type: string;
-    severity: string;
-    message: string;
-  }[];
+  anomalies: AnomalyItem[];
 };
 
 type Factory = {
@@ -41,120 +43,169 @@ type Machine = {
   factory_id: number;
 };
 
+type MaintenanceTicket = {
+  id: number;
+  machine_id: number;
+  machine: string;
+  title: string;
+  description: string;
+  priority: string;
+  status: string;
+  created_at: string;
+};
+
 export default function Home() {
   const [data, setData] = useState<DashboardData | null>(null);
+
   const [factory, setFactory] = useState<Factory | null>(null);
+
   const [machines, setMachines] = useState<Machine[]>([]);
-
-  const [question, setQuestion] = useState("");
-  const [aiAnswer, setAiAnswer] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
-
-  const [selectedMachine, setSelectedMachine] = useState<number | null>(null);
-  const [machineAnalysis, setMachineAnalysis] = useState("");
-
-  const [ticketLoading, setTicketLoading] = useState(false);
-  const [ticketMessage, setTicketMessage] = useState("");
-  const [ticketCreated, setTicketCreated] = useState(false);
 
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
 
+  const [tickets, setTickets] = useState<MaintenanceTicket[]>([]);
+
+  const [question, setQuestion] = useState("");
+
+  const [aiAnswer, setAiAnswer] = useState("");
+
+  const [machineAnalysis, setMachineAnalysis] = useState("");
+
+  const [selectedMachine, setSelectedMachine] = useState<number | null>(null);
+
   const [loading, setLoading] = useState(true);
+
+  const [ticketsLoading, setTicketsLoading] = useState(true);
+
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const [ticketLoading, setTicketLoading] = useState(false);
+
+  const [ticketMessage, setTicketMessage] = useState("");
+
+  const [ticketCreated, setTicketCreated] = useState(false);
+
   const [error, setError] = useState("");
 
+  // -----------------------------------------
+  // LOAD DASHBOARD DATA
+  // -----------------------------------------
+
   useEffect(() => {
-    async function loadDashboard() {
+    const loadDashboard = async () => {
       try {
-        const [dashboardResponse, factoryResponse, anomalyResponse] =
-          await Promise.all([
-            fetch("http://127.0.0.1:8000/dashboard/summary"),
-            fetch("http://127.0.0.1:8000/factory/"),
-            fetch("http://127.0.0.1:8000/anomalies/"),
-          ]);
+        setLoading(true);
+        setTicketsLoading(true);
+        setError("");
+
+        const [
+          dashboardResponse,
+          factoryResponse,
+          anomalyResponse,
+          ticketResponse,
+        ] = await Promise.all([
+          fetch("http://127.0.0.1:8000/dashboard/summary"),
+
+          fetch("http://127.0.0.1:8000/factory/"),
+
+          fetch("http://127.0.0.1:8000/anomalies/"),
+
+          fetch("http://127.0.0.1:8000/maintenance/"),
+        ]);
 
         if (
           !dashboardResponse.ok ||
           !factoryResponse.ok ||
-          !anomalyResponse.ok
+          !anomalyResponse.ok ||
+          !ticketResponse.ok
         ) {
           throw new Error("Failed to load dashboard data");
         }
 
         const dashboardData = await dashboardResponse.json();
-        const factories: Factory[] = await factoryResponse.json();
+
+        const factories = await factoryResponse.json();
+
         const anomalyData = await anomalyResponse.json();
 
+        const ticketData = await ticketResponse.json();
+
         setData(dashboardData);
-        setAnomalies(anomalyData.anomalies || []);
 
-        if (factories.length > 0) {
-          const currentFactory = factories[0];
+        setFactory(factories[0] ?? null);
 
-          setFactory(currentFactory);
+        setAnomalies(anomalyData.anomalies ?? []);
 
-          const machinesResponse = await fetch(
-            `http://127.0.0.1:8000/factory/${currentFactory.id}/machines`,
+        setTickets(ticketData.tickets ?? []);
+
+        // Load machines
+        if (factories[0]) {
+          const machineResponse = await fetch(
+            `http://127.0.0.1:8000/factory/${factories[0].id}/machines`,
           );
 
-          if (!machinesResponse.ok) {
+          if (!machineResponse.ok) {
             throw new Error("Failed to load machines");
           }
 
-          const machinesData = await machinesResponse.json();
+          const machineData = await machineResponse.json();
 
-          setMachines(machinesData);
+          setMachines(machineData);
         }
       } catch (error) {
-        console.error("Dashboard error:", error);
+        console.error(error);
 
-        setError(
-          "Could not load FactorAI data. Make sure the backend and PostgreSQL are running.",
-        );
+        setError("FactorAI could not load factory data.");
       } finally {
         setLoading(false);
+        setTicketsLoading(false);
       }
-    }
+    };
 
     loadDashboard();
   }, []);
 
-  /* =========================================================
-     MACHINE AI ANALYSIS
-  ========================================================= */
+  // -----------------------------------------
+  // ANALYZE MACHINE
+  // -----------------------------------------
 
   const analyzeMachine = async (machineId: number) => {
     try {
       setSelectedMachine(machineId);
+
       setMachineAnalysis("");
+
+      setAnalysisLoading(true);
+
       setTicketMessage("");
+
       setTicketCreated(false);
-      setAiLoading(true);
 
       const response = await fetch(
         `http://127.0.0.1:8000/ai/analyze/${machineId}`,
       );
 
       if (!response.ok) {
-        throw new Error("Machine analysis failed");
+        throw new Error("Failed to analyze machine");
       }
 
       const result = await response.json();
 
-      setMachineAnalysis(result.analysis || "No analysis available.");
+      setMachineAnalysis(result.analysis);
     } catch (error) {
-      console.error("Machine analysis error:", error);
+      console.error(error);
 
-      setMachineAnalysis(
-        "FactorAI could not analyze this machine. Make sure the backend and Ollama are running.",
-      );
+      setMachineAnalysis("FactorAI could not analyze this machine right now.");
     } finally {
-      setAiLoading(false);
+      setAnalysisLoading(false);
     }
   };
 
-  /* =========================================================
-     CREATE MAINTENANCE TICKET
-  ========================================================= */
+  // -----------------------------------------
+  // CREATE MAINTENANCE TICKET
+  // -----------------------------------------
 
   const createMaintenanceTicket = async () => {
     if (selectedMachine === null || !machineAnalysis) {
@@ -169,18 +220,25 @@ export default function Home() {
 
     try {
       setTicketLoading(true);
+
       setTicketMessage("");
+
       setTicketCreated(false);
 
       const response = await fetch("http://127.0.0.1:8000/maintenance/", {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
         },
+
         body: JSON.stringify({
           machine_id: machine.id,
+
           title: `${machine.name} production issue`,
+
           description: machineAnalysis,
+
           priority: "high",
         }),
       });
@@ -198,6 +256,9 @@ export default function Home() {
       setTicketMessage(
         `Maintenance ticket #${result.ticket.id} created successfully.`,
       );
+
+      // Immediately add ticket to UI
+      setTickets((currentTickets) => [result.ticket, ...currentTickets]);
     } catch (error) {
       console.error("Ticket creation error:", error);
 
@@ -207,571 +268,682 @@ export default function Home() {
     }
   };
 
-  /* =========================================================
-     FACTORAI ASSISTANT
-  ========================================================= */
+  // -----------------------------------------
+  // ASK FACTORAI
+  // -----------------------------------------
 
-  async function askFactorAI() {
-    if (!question.trim() || aiLoading) {
+  const askFactorAI = async () => {
+    if (!question.trim()) {
       return;
     }
 
-    setAiLoading(true);
-    setAiAnswer("");
-
     try {
+      setAiLoading(true);
+
+      setAiAnswer("");
+
       const response = await fetch("http://127.0.0.1:8000/ai/ask", {
         method: "POST",
+
         headers: {
           "Content-Type": "application/json",
         },
+
         body: JSON.stringify({
           question: question.trim(),
         }),
       });
 
       if (!response.ok) {
-        throw new Error("AI request failed");
+        throw new Error("Failed to ask FactorAI");
       }
 
       const result = await response.json();
 
-      setAiAnswer(result.answer || "No answer returned.");
+      setAiAnswer(result.answer);
     } catch (error) {
-      console.error("AI error:", error);
+      console.error(error);
 
-      setAiAnswer(
-        "FactorAI could not complete the analysis. Make sure the backend, PostgreSQL, and Ollama are running.",
-      );
+      setAiAnswer("FactorAI could not answer your question right now.");
     } finally {
       setAiLoading(false);
     }
-  }
+  };
 
-  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      askFactorAI();
+  // -----------------------------------------
+  // REFRESH TICKETS
+  // -----------------------------------------
+
+  const refreshTickets = async () => {
+    try {
+      setTicketsLoading(true);
+
+      const response = await fetch("http://127.0.0.1:8000/maintenance/");
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch tickets");
+      }
+
+      const result = await response.json();
+
+      setTickets(result.tickets ?? []);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setTicketsLoading(false);
     }
-  }
+  };
 
-  /* =========================================================
-     LOADING STATE
-  ========================================================= */
+  // -----------------------------------------
+  // UPDATE TICKET STATUS
+  // -----------------------------------------
+
+  const updateTicketStatus = async (ticketId: number, status: string) => {
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:8000/maintenance/${ticketId}/status`,
+        {
+          method: "PATCH",
+
+          headers: {
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify({
+            status,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to update ticket status");
+      }
+
+      const result = await response.json();
+
+      setTickets((currentTickets) =>
+        currentTickets.map((ticket) =>
+          ticket.id === ticketId
+            ? {
+                ...ticket,
+                status: result.ticket.status,
+              }
+            : ticket,
+        ),
+      );
+    } catch (error) {
+      console.error("Status update error:", error);
+    }
+  };
+
+  // -----------------------------------------
+  // LOADING STATE
+  // -----------------------------------------
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-950 text-white">
+      <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-gray-700 border-t-blue-500" />
+          <div className="text-2xl font-semibold">FactorAI</div>
 
-          <p className="text-gray-400">Loading FactorAI...</p>
-        </div>
-      </main>
-    );
-  }
-
-  /* =========================================================
-     ERROR STATE
-  ========================================================= */
-
-  if (error || !data) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-950 px-6 text-white">
-        <div className="max-w-md rounded-2xl border border-gray-800 bg-gray-900 p-8 text-center">
-          <h1 className="text-xl font-semibold">FactorAI</h1>
-
-          <p className="mt-3 text-sm leading-6 text-gray-400">
-            {error || "Unable to load dashboard."}
+          <p className="mt-2 text-sm text-slate-400">
+            Loading factory intelligence...
           </p>
-
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-6 rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-medium transition hover:bg-blue-600"
-          >
-            Retry
-          </button>
         </div>
       </main>
     );
   }
 
-  /* =========================================================
-     MAIN DASHBOARD
-  ========================================================= */
+  // -----------------------------------------
+  // ERROR STATE
+  // -----------------------------------------
+
+  if (error) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-6">
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-8 text-center">
+          <h1 className="text-xl font-semibold text-red-400">
+            Something went wrong
+          </h1>
+
+          <p className="mt-2 text-sm text-slate-400">{error}</p>
+        </div>
+      </main>
+    );
+  }
+
+  // -----------------------------------------
+  // MAIN UI
+  // -----------------------------------------
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white">
+    <main className="min-h-screen bg-slate-950 text-white">
       {/* HEADER */}
 
-      <header className="border-b border-gray-800">
-        <div className="mx-auto max-w-7xl px-6 py-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">FactorAI</h1>
+      <header className="border-b border-slate-800 bg-slate-950/90">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">FactorAI</h1>
 
-              <p className="mt-1 text-sm text-gray-400">
-                AI-powered factory operations
-              </p>
-            </div>
+            <p className="mt-1 text-sm text-slate-400">
+              AI-powered factory operations intelligence
+            </p>
+          </div>
 
-            <div className="flex items-center gap-2 text-sm text-gray-400">
-              <div className="h-2 w-2 rounded-full bg-green-400" />
-              System Online
-            </div>
+          <div className="rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-300">
+            Operations Dashboard
           </div>
         </div>
       </header>
 
-      <section className="mx-auto max-w-7xl px-6 py-8">
+      <div className="mx-auto max-w-7xl px-6 py-8">
         {/* FACTORY */}
 
         {factory && (
-          <div className="mb-8">
-            <h2 className="text-2xl font-semibold">{factory.name}</h2>
+          <section className="mb-8">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+              <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+                    Factory
+                  </p>
 
-            <p className="mt-1 text-sm text-gray-400">{factory.location}</p>
-          </div>
-        )}
+                  <h2 className="mt-1 text-2xl font-semibold">
+                    {factory.name}
+                  </h2>
 
-        {/* ===================================================
-            ACTIVE ANOMALIES
-        =================================================== */}
-
-        <section className="mb-8">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold">Active Anomalies</h2>
-
-              <p className="mt-1 text-sm text-gray-500">
-                Automatically detected operational issues
-              </p>
-            </div>
-
-            <div
-              className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                anomalies.length > 0
-                  ? "bg-red-500/10 text-red-400"
-                  : "bg-green-500/10 text-green-400"
-              }`}
-            >
-              {anomalies.length}{" "}
-              {anomalies.length === 1 ? "Anomaly" : "Anomalies"}
-            </div>
-          </div>
-
-          {anomalies.length === 0 ? (
-            <div className="rounded-2xl border border-gray-800 bg-gray-900 p-6">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10 text-green-400">
-                  ✓
+                  <p className="mt-1 text-sm text-slate-400">
+                    {factory.location}
+                  </p>
                 </div>
 
-                <div>
-                  <h3 className="font-semibold">No anomalies detected</h3>
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
+                  <p className="text-xs text-emerald-400">System Status</p>
 
-                  <p className="mt-1 text-sm text-gray-500">
-                    Factory operations are currently within normal thresholds.
+                  <p className="mt-1 font-semibold text-emerald-300">
+                    Operational
                   </p>
                 </div>
               </div>
             </div>
+          </section>
+        )}
+
+        {/* ACTIVE ANOMALIES */}
+
+        <section className="mb-8">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">Active Anomalies</h2>
+
+              <p className="mt-1 text-sm text-slate-400">
+                Issues detected from current factory data.
+              </p>
+            </div>
+
+            <div className="rounded-full border border-slate-800 bg-slate-900 px-3 py-1 text-sm">
+              {anomalies.length} detected
+            </div>
+          </div>
+
+          {anomalies.length === 0 ? (
+            <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
+              <p className="text-sm text-slate-400">
+                No active anomalies detected.
+              </p>
+            </div>
           ) : (
             <div className="space-y-4">
-              {anomalies.map((item) => (
+              {anomalies.map((anomaly) => (
                 <div
-                  key={item.machine_id}
-                  className="rounded-2xl border border-red-500/20 bg-gray-900 p-6"
+                  key={anomaly.machine_id}
+                  className="rounded-2xl border border-red-500/20 bg-red-500/5 p-6"
                 >
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
                     <div>
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10 text-red-400">
-                          !
-                        </div>
+                        <span className="rounded-full bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-400">
+                          HIGH
+                        </span>
 
-                        <div>
-                          <h3 className="font-semibold">{item.machine}</h3>
+                        <span className="text-sm text-slate-500">
+                          {anomaly.anomaly_count} issues
+                        </span>
+                      </div>
 
-                          <p className="text-sm text-gray-500">
-                            {item.status} • {item.anomaly_count} issue
-                            {item.anomaly_count === 1 ? "" : "s"} detected
-                          </p>
-                        </div>
+                      <h3 className="mt-3 text-lg font-semibold">
+                        {anomaly.machine}
+                      </h3>
+
+                      <div className="mt-3 space-y-2">
+                        {anomaly.anomalies.map((item, index) => (
+                          <div key={index} className="text-sm text-slate-300">
+                            • {item.message}
+                          </div>
+                        ))}
                       </div>
                     </div>
 
-                    <span className="w-fit rounded-full bg-red-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-red-400">
-                      Attention Required
-                    </span>
+                    <button
+                      onClick={() => analyzeMachine(anomaly.machine_id)}
+                      className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-slate-200"
+                    >
+                      Analyze with FactorAI
+                    </button>
                   </div>
-
-                  {/* ANOMALY DETAILS */}
-
-                  <div className="mt-5 space-y-3">
-                    {item.anomalies.map((anomaly, index) => (
-                      <div
-                        key={index}
-                        className="rounded-xl border border-gray-800 bg-gray-950 p-4"
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="mt-1 h-2 w-2 rounded-full bg-red-400" />
-
-                          <div>
-                            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                              {anomaly.type.replaceAll("_", " ")}
-                            </p>
-
-                            <p className="mt-1 text-sm leading-6 text-gray-300">
-                              {anomaly.message}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* ANALYZE BUTTON */}
-
-                  <button
-                    onClick={() => analyzeMachine(item.machine_id)}
-                    disabled={aiLoading && selectedMachine === item.machine_id}
-                    className="mt-5 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-medium transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {aiLoading && selectedMachine === item.machine_id
-                      ? "Analyzing..."
-                      : "Analyze with FactorAI"}
-                  </button>
                 </div>
               ))}
             </div>
           )}
         </section>
 
-        {/* ===================================================
-            MACHINE AI ANALYSIS
-        =================================================== */}
+        {/* FACTORAI MACHINE ANALYSIS */}
 
-        {selectedMachine !== null && (
-          <section className="mb-8 rounded-2xl border border-blue-500/20 bg-gray-900 p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10 text-xs font-semibold text-blue-400">
-                  AI
-                </div>
-
+        {(analysisLoading || machineAnalysis) && (
+          <section className="mb-8">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+              <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
                 <div>
-                  <h3 className="font-semibold">FactorAI Analysis</h3>
-
-                  <p className="text-xs text-gray-500">
-                    Based on production and quality data
+                  <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+                    FactorAI Analysis
                   </p>
-                </div>
-              </div>
 
-              <button
-                onClick={() => {
-                  setSelectedMachine(null);
-                  setMachineAnalysis("");
-                  setTicketMessage("");
-                  setTicketCreated(false);
-                }}
-                className="rounded-lg border border-gray-700 px-3 py-1.5 text-sm text-gray-400 transition hover:bg-gray-800 hover:text-white"
-              >
-                Close
-              </button>
-            </div>
-
-            {/* AI ANALYSIS */}
-
-            {aiLoading ? (
-              <div className="rounded-xl border border-gray-800 bg-gray-950 p-5">
-                <div className="flex items-center gap-3 text-gray-400">
-                  <div className="h-2 w-2 animate-pulse rounded-full bg-blue-400" />
-                  FactorAI is analyzing this machine...
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-gray-800 bg-gray-950 p-5">
-                <p className="whitespace-pre-wrap leading-7 text-gray-300">
-                  {machineAnalysis}
-                </p>
-              </div>
-            )}
-
-            {/* CREATE MAINTENANCE TICKET */}
-
-            {machineAnalysis && !aiLoading && (
-              <div className="mt-5 border-t border-gray-800 pt-5">
-                <div className="mb-3">
-                  <h4 className="text-sm font-semibold">Recommended Action</h4>
-
-                  <p className="mt-1 text-xs text-gray-500">
-                    Create an operational maintenance ticket from this analysis.
-                  </p>
+                  <h2 className="mt-1 text-xl font-semibold">
+                    {selectedMachine
+                      ? (machines.find(
+                          (machine) => machine.id === selectedMachine,
+                        )?.name ?? "Machine")
+                      : "Machine"}
+                  </h2>
                 </div>
 
-                <button
-                  onClick={createMaintenanceTicket}
-                  disabled={ticketLoading || ticketCreated}
-                  className="rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {ticketLoading
-                    ? "Creating Ticket..."
-                    : ticketCreated
-                      ? "Ticket Created"
-                      : "Create Maintenance Ticket"}
-                </button>
-
-                {ticketMessage && (
-                  <p
-                    className={`mt-3 text-sm ${
-                      ticketCreated ? "text-green-400" : "text-red-400"
-                    }`}
+                {machineAnalysis && !analysisLoading && (
+                  <button
+                    onClick={createMaintenanceTicket}
+                    disabled={ticketLoading || ticketCreated}
+                    className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {ticketMessage}
-                  </p>
+                    {ticketLoading
+                      ? "Creating Ticket..."
+                      : ticketCreated
+                        ? "Ticket Created"
+                        : "Create Maintenance Ticket"}
+                  </button>
                 )}
               </div>
-            )}
+
+              <div className="mt-6 rounded-xl border border-slate-800 bg-slate-950 p-5">
+                {analysisLoading ? (
+                  <div className="flex items-center gap-3 text-sm text-slate-400">
+                    <div className="h-2 w-2 animate-pulse rounded-full bg-slate-400" />
+                    FactorAI is analyzing production and quality data...
+                  </div>
+                ) : (
+                  <div className="whitespace-pre-line text-sm leading-7 text-slate-300">
+                    {machineAnalysis}
+                  </div>
+                )}
+              </div>
+
+              {ticketMessage && (
+                <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-300">
+                  {ticketMessage}
+                </div>
+              )}
+            </div>
           </section>
         )}
 
-        {/* ===================================================
-            FACTORY OVERVIEW
-        =================================================== */}
+        {/* OVERVIEW */}
 
-        <section>
-          <h2 className="mb-6 text-xl font-semibold">Factory Overview</h2>
+        {data && (
+          <section className="mb-8">
+            <div className="mb-4">
+              <h2 className="text-xl font-semibold">Factory Overview</h2>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <MetricCard title="Total Machines" value={data.total_machines} />
-
-            <MetricCard title="Active Machines" value={data.active_machines} />
-
-            <MetricCard
-              title="Under Maintenance"
-              value={data.maintenance_machines}
-            />
-
-            <MetricCard
-              title="Production Achievement"
-              value={`${data.production_achievement}%`}
-            />
-          </div>
-        </section>
-
-        {/* ===================================================
-            PRODUCTION + QUALITY
-        =================================================== */}
-
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* PRODUCTION */}
-
-          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-6">
-            <h3 className="text-lg font-semibold">Production</h3>
-
-            <div className="mt-5">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Production</span>
-
-                <span>
-                  {data.total_production.toLocaleString()} /{" "}
-                  {data.total_target.toLocaleString()}
-                </span>
-              </div>
-
-              <ProgressBar
-                value={data.total_production}
-                max={data.total_target}
-              />
-            </div>
-          </div>
-
-          {/* QUALITY */}
-
-          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-6">
-            <h3 className="text-lg font-semibold">Quality</h3>
-
-            <div className="mt-5">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Defect Rate</span>
-
-                <span>{data.defect_rate}%</span>
-              </div>
-
-              <div className="mt-3 text-sm text-gray-400">
-                {data.total_defects.toLocaleString()} defects from{" "}
-                {data.total_inspected.toLocaleString()} inspections
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ===================================================
-            MACHINES
-        =================================================== */}
-
-        <section className="mt-8">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold">Machines</h2>
-
-              <p className="mt-1 text-sm text-gray-500">
-                Current machine status across the factory
+              <p className="mt-1 text-sm text-slate-400">
+                Current operational performance.
               </p>
             </div>
 
-            <span className="text-sm text-gray-500">
-              {machines.length} machines
-            </span>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <MetricCard
+                title="Total Machines"
+                value={data.total_machines}
+                subtitle={`${data.active_machines} active`}
+              />
+
+              <MetricCard
+                title="Production Achievement"
+                value={`${data.production_achievement}%`}
+                subtitle={`${data.total_production.toLocaleString()} / ${data.total_target.toLocaleString()} units`}
+              />
+
+              <MetricCard
+                title="Defect Rate"
+                value={`${data.defect_rate}%`}
+                subtitle={`${data.total_defects.toLocaleString()} defects`}
+              />
+
+              <MetricCard
+                title="Maintenance"
+                value={data.maintenance_machines}
+                subtitle="Machines requiring attention"
+              />
+            </div>
+          </section>
+        )}
+
+        {/* PRODUCTION + QUALITY */}
+
+        {data && (
+          <section className="mb-8 grid gap-6 lg:grid-cols-2">
+            {/* Production */}
+
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Production</h2>
+
+                  <p className="mt-1 text-sm text-slate-400">
+                    Overall production achievement
+                  </p>
+                </div>
+
+                <span className="text-2xl font-bold">
+                  {data.production_achievement}%
+                </span>
+              </div>
+
+              <div className="mt-6">
+                <ProgressBar value={data.production_achievement} />
+              </div>
+
+              <div className="mt-4 flex justify-between text-sm text-slate-400">
+                <span>Actual: {data.total_production.toLocaleString()}</span>
+
+                <span>Target: {data.total_target.toLocaleString()}</span>
+              </div>
+            </div>
+
+            {/* Quality */}
+
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Quality</h2>
+
+                  <p className="mt-1 text-sm text-slate-400">
+                    Current factory defect rate
+                  </p>
+                </div>
+
+                <span className="text-2xl font-bold">{data.defect_rate}%</span>
+              </div>
+
+              <div className="mt-6">
+                <ProgressBar value={data.defect_rate} inverse />
+              </div>
+
+              <div className="mt-4 flex justify-between text-sm text-slate-400">
+                <span>Inspected: {data.total_inspected.toLocaleString()}</span>
+
+                <span>Defects: {data.total_defects.toLocaleString()}</span>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* MACHINES */}
+
+        <section className="mb-8">
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold">Machines</h2>
+
+            <p className="mt-1 text-sm text-slate-400">
+              Factory machine status and AI analysis.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {machines.map((machine) => (
               <MachineCard
                 key={machine.id}
                 machine={machine}
                 onAnalyze={analyzeMachine}
-                selected={selectedMachine === machine.id}
               />
             ))}
           </div>
         </section>
 
-        {/* ===================================================
-            FACTORAI ASSISTANT
-        =================================================== */}
+        {/* MAINTENANCE TICKETS */}
 
-        <section className="mt-8 rounded-2xl border border-gray-800 bg-gray-900">
-          {/* ASSISTANT HEADER */}
+        <section className="mb-8">
+          <div className="mb-4 flex flex-col justify-between gap-3 md:flex-row md:items-end">
+            <div>
+              <h2 className="text-xl font-semibold">Maintenance Tickets</h2>
 
-          <div className="border-b border-gray-800 p-6">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-sm font-semibold text-blue-400">
-                AI
-              </div>
-
-              <div>
-                <h2 className="text-lg font-semibold">FactorAI Assistant</h2>
-
-                <p className="text-sm text-gray-400">
-                  Ask questions about your factory operations
-                </p>
-              </div>
+              <p className="mt-1 text-sm text-slate-400">
+                Track maintenance actions created by FactorAI.
+              </p>
             </div>
+
+            <button
+              onClick={refreshTickets}
+              className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-800"
+            >
+              Refresh
+            </button>
           </div>
 
-          {/* ASSISTANT RESPONSE */}
+          {ticketsLoading ? (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+              <p className="text-sm text-slate-400">
+                Loading maintenance tickets...
+              </p>
+            </div>
+          ) : tickets.length === 0 ? (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+              <p className="text-sm text-slate-400">
+                No maintenance tickets have been created yet.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {tickets.map((ticket) => (
+                <div
+                  key={ticket.id}
+                  className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+                >
+                  <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+                    <div>
+                      <p className="text-xs text-slate-500">
+                        Ticket #{ticket.id}
+                      </p>
 
-          <div className="min-h-40 p-6">
-            {aiLoading ? (
-              <div className="flex items-center gap-3 text-gray-400">
-                <div className="h-2 w-2 animate-pulse rounded-full bg-blue-400" />
-                FactorAI is analyzing your factory data...
-              </div>
-            ) : aiAnswer ? (
-              <div>
-                <div className="mb-3 text-xs font-medium uppercase tracking-wider text-blue-400">
-                  FactorAI Analysis
+                      <h3 className="mt-1 text-lg font-semibold">
+                        {ticket.title}
+                      </h3>
+
+                      <p className="mt-1 text-sm text-slate-400">
+                        Machine: {ticket.machine}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {/* PRIORITY */}
+
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-medium ${
+                          ticket.priority.toLowerCase() === "high"
+                            ? "bg-red-500/10 text-red-400"
+                            : ticket.priority.toLowerCase() === "medium"
+                              ? "bg-yellow-500/10 text-yellow-400"
+                              : "bg-slate-800 text-slate-300"
+                        }`}
+                      >
+                        {ticket.priority.toUpperCase()}
+                      </span>
+
+                      {/* STATUS */}
+
+                      <select
+                        value={ticket.status}
+                        onChange={(event) =>
+                          updateTicketStatus(ticket.id, event.target.value)
+                        }
+                        className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs font-medium text-slate-300 outline-none"
+                      >
+                        <option value="open">OPEN</option>
+
+                        <option value="in progress">IN PROGRESS</option>
+
+                        <option value="resolved">RESOLVED</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-300">
+                    {ticket.description}
+                  </p>
+
+                  <div className="mt-4 text-xs text-slate-500">
+                    Created: {new Date(ticket.created_at).toLocaleString()}
+                  </div>
                 </div>
+              ))}
+            </div>
+          )}
+        </section>
 
-                <p className="whitespace-pre-wrap leading-7 text-gray-200">
-                  {aiAnswer}
-                </p>
-              </div>
-            ) : (
-              <div className="text-gray-500">
-                Ask FactorAI something about your factory.
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Suggestion
-                    text="Why did CNC-01 production drop?"
-                    onClick={() =>
-                      setQuestion("Why did CNC-01 production drop?")
-                    }
-                  />
+        {/* ASK FACTORAI */}
 
-                  <Suggestion
-                    text="Which machine has the highest defect rate?"
-                    onClick={() =>
-                      setQuestion("Which machine has the highest defect rate?")
-                    }
-                  />
+        <section className="mb-8">
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold">Ask FactorAI</h2>
 
-                  <Suggestion
-                    text="What machines are under maintenance?"
-                    onClick={() =>
-                      setQuestion("What machines are under maintenance?")
-                    }
-                  />
-                </div>
-              </div>
-            )}
+            <p className="mt-1 text-sm text-slate-400">
+              Ask questions about factory operations, production, quality, or
+              maintenance.
+            </p>
           </div>
 
-          {/* QUESTION INPUT */}
-
-          <div className="border-t border-gray-800 p-6">
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <textarea
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+            <div className="flex flex-col gap-3 md:flex-row">
+              <input
+                type="text"
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask FactorAI..."
-                rows={2}
-                className="flex-1 resize-none rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-blue-500"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    askFactorAI();
+                  }
+                }}
+                placeholder="Why did production drop on CNC-01?"
+                className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-slate-500"
               />
 
               <button
                 onClick={askFactorAI}
                 disabled={aiLoading || !question.trim()}
-                className="rounded-xl bg-blue-500 px-6 py-3 text-sm font-medium transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40 sm:self-end"
+                className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {aiLoading ? "Analyzing..." : "Ask"}
+                {aiLoading ? "Thinking..." : "Ask FactorAI"}
               </button>
             </div>
 
-            <p className="mt-2 text-xs text-gray-600">
-              Press Enter to ask • Shift + Enter for a new line
-            </p>
+            {aiAnswer && (
+              <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950 p-5">
+                <div className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-500">
+                  FactorAI Response
+                </div>
+
+                <div className="whitespace-pre-line text-sm leading-7 text-slate-300">
+                  {aiAnswer}
+                </div>
+              </div>
+            )}
+
+            {/* SUGGESTIONS */}
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Suggestion
+                text="Why did production drop on CNC-01?"
+                onClick={() =>
+                  setQuestion("Why did production drop on CNC-01?")
+                }
+              />
+
+              <Suggestion
+                text="Which machines need maintenance?"
+                onClick={() => setQuestion("Which machines need maintenance?")}
+              />
+
+              <Suggestion
+                text="Which machine has the highest defect rate?"
+                onClick={() =>
+                  setQuestion("Which machine has the highest defect rate?")
+                }
+              />
+            </div>
           </div>
         </section>
-      </section>
+
+        {/* FOOTER */}
+
+        <footer className="border-t border-slate-800 py-6 text-center">
+          <p className="text-xs text-slate-600">
+            FactorAI • AI-powered factory operations platform
+          </p>
+        </footer>
+      </div>
     </main>
   );
 }
 
-/* =========================================================
-   METRIC CARD
-========================================================= */
+// =============================================
+// METRIC CARD
+// =============================================
 
 function MetricCard({
   title,
   value,
+  subtitle,
 }: {
   title: string;
   value: string | number;
+  subtitle: string;
 }) {
   return (
-    <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
-      <p className="text-sm text-gray-400">{title}</p>
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+      <p className="text-sm text-slate-400">{title}</p>
 
-      <p className="mt-2 text-3xl font-bold">{value}</p>
+      <p className="mt-2 text-3xl font-bold tracking-tight">{value}</p>
+
+      <p className="mt-2 text-xs text-slate-500">{subtitle}</p>
     </div>
   );
 }
 
-/* =========================================================
-   PROGRESS BAR
-========================================================= */
+// =============================================
+// PROGRESS BAR
+// =============================================
 
-function ProgressBar({ value, max }: { value: number; max: number }) {
-  const percentage = max > 0 ? Math.min((value / max) * 100, 100) : 0;
+function ProgressBar({
+  value,
+  inverse = false,
+}: {
+  value: number;
+  inverse?: boolean;
+}) {
+  const percentage = Math.max(0, Math.min(value, 100));
 
   return (
-    <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-800">
+    <div className="h-2 overflow-hidden rounded-full bg-slate-800">
       <div
-        className="h-full rounded-full bg-blue-500 transition-all"
+        className={`h-full rounded-full ${
+          inverse ? "bg-red-400" : "bg-emerald-400"
+        }`}
         style={{
           width: `${percentage}%`,
         }}
@@ -780,96 +952,58 @@ function ProgressBar({ value, max }: { value: number; max: number }) {
   );
 }
 
-/* =========================================================
-   MACHINE CARD
-========================================================= */
+// =============================================
+// MACHINE CARD
+// =============================================
 
 function MachineCard({
   machine,
   onAnalyze,
-  selected,
 }: {
   machine: Machine;
   onAnalyze: (machineId: number) => void;
-  selected: boolean;
 }) {
   const isMaintenance = machine.status.toLowerCase() === "maintenance";
 
-  const isActive = machine.status.toLowerCase() === "active";
-
   return (
-    <div
-      className={`rounded-2xl border bg-gray-900 p-5 transition ${
-        selected
-          ? "border-blue-500/50"
-          : "border-gray-800 hover:border-gray-700"
-      }`}
-    >
-      {/* MACHINE HEADER */}
-
-      <div className="flex items-start justify-between">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="font-semibold">{machine.name}</h3>
 
-          <p className="mt-1 text-sm text-gray-500">{machine.machine_type}</p>
+          <p className="mt-1 text-xs text-slate-500">{machine.machine_type}</p>
         </div>
 
-        <div
-          className={`flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium ${
-            isActive
-              ? "bg-green-500/10 text-green-400"
-              : isMaintenance
-                ? "bg-yellow-500/10 text-yellow-400"
-                : "bg-gray-500/10 text-gray-400"
+        <span
+          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+            isMaintenance
+              ? "bg-yellow-500/10 text-yellow-400"
+              : "bg-emerald-500/10 text-emerald-400"
           }`}
         >
-          <div
-            className={`h-1.5 w-1.5 rounded-full ${
-              isActive
-                ? "bg-green-400"
-                : isMaintenance
-                  ? "bg-yellow-400"
-                  : "bg-gray-400"
-            }`}
-          />
-
           {machine.status}
-        </div>
+        </span>
       </div>
-
-      {/* MACHINE ID */}
-
-      <div className="mt-6 flex items-center justify-between border-t border-gray-800 pt-4">
-        <span className="text-xs text-gray-600">Machine ID</span>
-
-        <span className="text-xs text-gray-400">#{machine.id}</span>
-      </div>
-
-      {/* ANALYZE BUTTON */}
 
       <button
         onClick={() => onAnalyze(machine.id)}
-        className={`mt-4 w-full rounded-lg px-3 py-2 text-xs font-medium transition ${
-          selected
-            ? "bg-blue-500/10 text-blue-400"
-            : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
-        }`}
+        className="mt-5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
       >
-        {selected ? "Analysis Open" : "Analyze Machine"}
+        Analyze with FactorAI
       </button>
     </div>
   );
 }
 
-/* =========================================================
-   AI SUGGESTION
-========================================================= */
+// =============================================
+// SUGGESTION BUTTON
+// =============================================
 
 function Suggestion({ text, onClick }: { text: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-left text-xs text-gray-400 transition hover:border-blue-500 hover:text-white"
+      className="rounded-full border border-slate-800 bg-slate-950 px-3 py-1.5 text-xs text-slate-400 transition hover:border-slate-700 hover:text-slate-200"
     >
       {text}
     </button>

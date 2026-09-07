@@ -19,6 +19,10 @@ class MaintenanceTicketCreate(BaseModel):
     priority: str = "medium"
 
 
+class MaintenanceTicketStatusUpdate(BaseModel):
+    status: str
+
+
 @router.post("/")
 def create_maintenance_ticket(
     request: MaintenanceTicketCreate,
@@ -98,4 +102,54 @@ def get_maintenance_tickets(
     return {
         "count": len(results),
         "tickets": results,
+    }
+
+
+@router.patch("/{ticket_id}/status")
+def update_ticket_status(
+    ticket_id: int,
+    request: MaintenanceTicketStatusUpdate,
+    db: Session = Depends(get_db),
+):
+    allowed_statuses = {
+        "open",
+        "in progress",
+        "resolved",
+    }
+
+    new_status = request.status.strip().lower()
+
+    if new_status not in allowed_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid status. Use: open, in progress, resolved.",
+        )
+
+    ticket = (
+        db.query(MaintenanceTicket)
+        .filter(MaintenanceTicket.id == ticket_id)
+        .first()
+    )
+
+    if not ticket:
+        raise HTTPException(
+            status_code=404,
+            detail="Maintenance ticket not found",
+        )
+
+    ticket.status = new_status
+
+    db.commit()
+    db.refresh(ticket)
+
+    return {
+        "message": "Ticket status updated successfully",
+        "ticket": {
+            "id": ticket.id,
+            "machine_id": ticket.machine_id,
+            "title": ticket.title,
+            "priority": ticket.priority,
+            "status": ticket.status,
+            "created_at": ticket.created_at,
+        },
     }
