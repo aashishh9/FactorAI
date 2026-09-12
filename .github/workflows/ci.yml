@@ -29,11 +29,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Install pytest
+        run: pip install pytest
+
       - name: Run tests
         env:
           FACTORAI_SECRET_KEY: factorai-ci-test-secret
           PYTHONPATH: .
-        run: pytest -q
+        run: python -m pytest -q
 
   frontend:
     name: Frontend build
