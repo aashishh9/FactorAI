@@ -1,65 +1,54 @@
 # FactorAI
 
-AI-powered factory operations platform for monitoring production, quality, and machine performance.
+AI-assisted factory operations and performance intelligence platform.
 
-FactorAI combines factory operational data with a locally running LLM to help identify production issues and provide evidence-based operational insights.
+FactorAI is a full-stack application that helps factory managers monitor production, analyze quality trends, detect machine performance anomalies, and manage maintenance from a single dashboard.
 
-## 🚧 Status
+## Features
 
-**MVP — In Development**
+- 📊 Production & quality performance dashboard
+- 🏭 Factory and machine management
+- 📈 Production and defect-rate analytics
+- 🚨 Machine anomaly detection
+- 🤖 AI-assisted operational analysis using Ollama + Qwen
+- 🛠️ Maintenance ticket management
+- 🔐 JWT authentication
+- 📉 Interactive charts and KPIs
+- 🐳 Dockerized development environment
+- ⚙️ GitHub Actions CI with automated tests and Docker builds
 
-### Currently working
+## Tech Stack
 
-- Factory operations dashboard
-- Production monitoring
-- Quality/defect monitoring
-- Machine status monitoring
-- PostgreSQL database
-- FastAPI backend
-- SQLAlchemy ORM
-- Alembic migrations
-- Local LLM inference with Ollama
-- Qwen3 integration
-- AI-powered production analysis
+**Frontend**
+- Next.js
+- TypeScript
+- Tailwind CSS
+- Recharts
 
-### Planned
+**Backend**
+- FastAPI
+- Python
+- SQLAlchemy
+- Alembic
+- JWT Authentication
 
-- Natural-language factory search
-- AI question & answer interface
-- Machine detail pages
-- Maintenance ticket workflow
-- Authentication
-- Automated tests
-- Dockerized application
-- CI/CD
-- Cloud deployment
+**Database**
+- PostgreSQL
 
-## 🏗️ Architecture
+**AI & DevOps**
+- Ollama + Qwen
+- Docker & Docker Compose
+- GitHub Actions
+
+## Architecture
 
 ```text
-┌──────────────────────┐
-│      Next.js UI      │
-│  TypeScript + React  │
-│      Tailwind CSS    │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│     FastAPI API      │
-│                      │
-│ Factory              │
-│ Production           │
-│ Quality              │
-│ Dashboard            │
-│ AI Analysis          │
-└───────┬────────┬─────┘
-        │        │
-        ▼        ▼
-┌────────────┐ ┌──────────────┐
-│ PostgreSQL │ │    Ollama    │
-│            │ │              │
-│ Factory    │ │   Qwen3      │
-│ Production │ │ Local LLM    │
-│ Quality    │ │              │
-│ Maintenance│ │              │
-└────────────┘ └──────────────┘
+Next.js Frontend
+       │
+       ▼
+   FastAPI API
+       │
+   ┌───┴──────────────┐
+   ▼                  ▼
+PostgreSQL       AI Analysis
+                 Ollama + Qwen
